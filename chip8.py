@@ -53,8 +53,56 @@ class CPU:
         self.keypadBuf = [0]*16
         self.screenBuf = self.clearScreenBuf()
         self.opcode = 0
+        self.table = {
+            0x0:self.table0,
+            0x1:self.OP_1nnn,
+            0x2:self.OP_2nnn,
+            0x3:self.OP_3xkk,
+            0x4:self.OP_4xKK,
+            0x5:self.OP_5xy0,
+            0x6:self.OP_6xKK,
+            0x7:self.OP_7xkk,
+            0x8:self.table8,
+            0x9:self.OP_9xy0,
+            0xA:self.OP_Annn,
+            0xB:self.OP_Bnnn,
+            0xC:self.OP_Cxkk,
+            0xD:self.OP_Dxyn,
+            0xE:self.tableE,
+            0xF:self.tableF
+        }
+        self.table_0={
+            0x0:self.OP_00E0,
+            0xE:self.OP_00EE
+        }
+        self.table_8={
+            0x0:self.OP_8xy0,
+            0x1:self.OP_8xy1,
+            0x2:self.OP_8xy2,
+            0x3:self.OP_8xy3,
+            0x4:self.OP_8xy4,
+            0x5:self.OP_8xy5,
+            0x6:self.OP_8xy6,
+            0x7:self.OP_8xy7,
+            0xE:self.OP_8xyE
+        }
+        self.table_E={
+            0x1:self.OP_ExA1,
+            0xE:self.OP_Ex9E
+        }
+        self.table_F={
+            0x7:self.OP_Fx07,
+            0xA:self.OP_Fx0A,
+            0x15:self.OP_Fx15,
+            0x18:self.OP_Fx18,
+            0x1E:self.OP_Fx1E,
+            0x29:self.OP_Fx29,
+            0x33:self.OP_Fx33,
+            0x55:self.OP_Fx55,
+            0x65:self.OP_Fx65
+        }
     def clearScreenBuf(self):
-        return [[0 for i in range(SCREEN_WIDTH*ZOOM) for j in range(SCREEN_HEIGHT*ZOOM)]]
+        return [0]*SCREEN_HEIGHT*SCREEN_WIDTH
     def OP_00E0(self):
         # 00E0 CLS
         self.screenBuf = self.clearScreenBuf()
@@ -172,23 +220,93 @@ class CPU:
         byte = self.opcode & 0x00FF
         self.registers[vx] = random.randrange(0,255) & byte
     def OP_Dxyn(self):
-        x = (self.opcode & 0x0F00)>>8
-        y = (self.opcode & 0x00F0)>>4
+        # DRW vx,vy,nibble
+        vx = (self.opcode & 0x0F00)>>8
+        vy = (self.opcode & 0x00F0)>>4
         height = self.opcode & 0x000F
-        vx = self.registers[x] % SCREEN_WIDTH
-        vy = self.registers[y] % SCREEN_HEIGHT
+        xPos = self.registers[vx] % SCREEN_WIDTH
+        yPos = self.registers[vy] % SCREEN_HEIGHT
         self.registers[0xF] = 0
         for row in range(height):
             spriteByte = self.memory.ram[self.regIndex + row]
-            yCord = vy + row
             for col in range(8):
-                xCord = vx + col
                 spritePixel = spriteByte & (0x80 >> col)
-                screenPixel = self.screenBuf[yPos][xPos]
-                # spritePixel = (spriteByte >> (7 - col)) & 0x01   
-                # screenPixel = self.screenBuf[(yPos + row)*SCREEN_WIDTH+(xPos + col)]    
-        if
-
+                # spritePixel = (spriteByte >> (7 - col)) & 0x01
+                screenPixel = self.screenBuf[(yPos + row)*SCREEN_WIDTH + (xPos+col)]
+                if spritePixel:
+                    if screenPixel:self.registers[0xF] = 1
+                    self.screenBuf[(yPos + row)*SCREEN_WIDTH + (xPos+col)] ^= 1
+    def OP_Ex9E(self):
+        # SKP vx
+        vx = (self.opcode & 0x0F00) >> 8
+        key = self.registers[vx]
+        if self.keypadBuf[key]:
+            self.regPC += 2
+    def OP_ExA1(self):
+        # SKNP vx
+        vx = (self.opcode & 0x0F00) >> 8
+        key = self.registers[vx]
+        if not self.keypadBuf[vx]:
+            self.regPC += 2
+    def OP_Fx07(self):
+        # LD vx,DT
+        vx = (self.opcode & 0x0F00) >> 8
+        self.registers[vx] = self.delayTimer
+    def OP_Fx0A(self):
+        # LD vx,k
+        vx = (self.opcode & 0x0F00) >> 8
+        for i in range(16):
+            if self.keypadBuf[i]:
+                self.registers[vx] = i
+                break
+        else:
+            self.regPC -= 2
+    def OP_Fx15(self):
+        # LD Dt,vx
+        vx = (self.opcode & 0x0F00) >> 8
+        self.delayTimer = self.registers[vx]
+    def OP_Fx18(self):
+        # LD ST,vx
+        vx = (self.opcode & 0x0F00) >> 8
+        self.soundTimer = self.registers[vx]
+    def OP_Fx1E(self):
+        # ADD I,vx
+        vx = (self.opcode & 0x0F00) >> 8
+        self.regIndex += self.registers[vx]
+    def OP_Fx29(self):
+        # LD,F,vx
+        vx = (self.opcode & 0x0F00) >> 8
+        digit = self.registers[vx]
+        self.regIndex = FONTSET_START_ADDR+ (5 * digit)
+    def OP_Fx33(self):
+        # LD B,vx
+        vx = (self.opcode & 0x0F00) >> 8
+        value = self.registers[vx]
+        self.memory.ram[self.regIndex + 2] = value % 10
+        value //=10
+        self.memory.ram[self.regIndex + 1] = value % 10
+        value //=10
+        self.memory.ram[self.regIndex] = value % 10
+    def OP_Fx55(self):
+        # LD [I],vx
+        vx = (self.opcode & 0x0F00) >> 8
+        for i in range(vx+1):
+            self.memory.ram[self.regIndex + i] = self.registers[i]
+    def OP_Fx65(self):
+        # LD vx,[i]
+        vx = (self.opcode & 0x0F00) >> 8
+        for i in range(vx + 1):
+            self.registers[i] = self.memory.ram[self.regIndex + i]
+    def OP_NULL(self):
+        ...
+    def table0(self):
+        self.table_0[self.opcode&0x000F]()
+    def table8(self):
+        self.table_8[self.opcode&0x000F]()
+    def tableE(self):
+        self.table_E[self.opcode&0x000F]()
+    def tableF(self):
+        self.table_F[self.opcode&0x00FF]()
 class Chip8:
     ...
 
