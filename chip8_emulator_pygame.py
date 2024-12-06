@@ -238,9 +238,9 @@ class CPU:
             self._reg_V[0xF] = 0
             for yy in range(n):
                 sys_byte = self._memory._ram[self._reg_index + yy]
+                y_cord = vy + yy
                 for xx in range(8):
                     x_cord = vx + xx
-                    y_cord = vy + yy
                     if x_cord < SCREEN_WIDTH and y_cord < SCREEN_HEIGHT:
                         sys_bit = (sys_byte >> (7-xx)) & 0x01
                         if (self._screen_buf[y_cord][x_cord] & sys_bit) == 1:
@@ -363,5 +363,5 @@ class Instruction:
 
 if __name__ == '__main__':
     machine = Machine()
-    machine.load_rom('./roms/OPCODE')
+    machine.load_rom('./roms/BC')
     machine.run()
