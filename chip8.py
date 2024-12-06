@@ -43,7 +43,7 @@ class Display:
     def __init__(self) -> None:
         pygame.init()
         pygame.display.set_caption("chip8")
-        self.canvas = pygame.display.set_mode((SCREEN_WIDTH*ZOOM,SCREEN_HEIGHT*ZOOM))
+        self.canvas = pygame.display.set_mode((64*10,32*10))
         self.canvas.fill((0,0,0))
         pygame.display.update()
     def render(self,screen_Buf:list):
@@ -53,10 +53,10 @@ class Display:
         self.canvas.fill((0,0,0))
         for yPos in range(SCREEN_HEIGHT):
             for xPos in range(SCREEN_WIDTH):
-                if screen_Buf[yPos * SCREEN_HEIGHT + xPos]:
+                if screen_Buf[yPos * SCREEN_WIDTH + xPos]==1:
                     self.draw_pixel(xPos,yPos)
     def draw_pixel(self,xPos,yPos):
-        pygame.draw.rect(self.canvas,(255,255,255),(xPos*ZOOM,yPos*ZOOM,ZOOM,ZOOM))
+        pygame.draw.rect(self.canvas,(255,255,255),(xPos*ZOOM,yPos*ZOOM,ZOOM,ZOOM),0)
     def quit(self):
         pygame.quit()
 class Keyboard:
@@ -182,6 +182,7 @@ class CPU:
         vx = (self.opcode & 0x0F00)>>8
         byte = self.opcode & 0x00FF
         self.registers[vx] += byte
+        self.registers[vx] &= 0xFF
     def OP_8xy0(self):
         # LD vx,vy
         vx = (self.opcode & 0x0F00)>>8
@@ -225,7 +226,7 @@ class CPU:
         # SUBN vx,vy
         vx = (self.opcode & 0x0F00)>>8
         vy = (self.opcode & 0x00F0)>>4
-        self.registers[0xF] = 1 if self.registers[vx] > self.registers[vy] else 0
+        self.registers[0xF] = 0x1 if self.registers[vx] < self.registers[vy] else 0x0
         self.registers[vx] = self.registers[vy] - self.registers[vx]
         self.registers[vx] &= 0xFF
     def OP_8xyE(self):
@@ -263,13 +264,19 @@ class CPU:
         self.registers[0xF] = 0
         for row in range(height):
             spriteByte = self.memory.ram[self.regIndex + row]
+            y_cord = yPos+row
             for col in range(8):
-                spritePixel = spriteByte & (0x80 >> col)
-                # spritePixel = (spriteByte >> (7 - col)) & 0x01
-                screenPixel = self.screenBuf[(yPos + row)*SCREEN_WIDTH + (xPos+col)]
-                if spritePixel:
-                    if screenPixel:self.registers[0xF] = 1
-                    self.screenBuf[(yPos + row)*SCREEN_WIDTH + (xPos+col)] ^= 1
+                x_cord = xPos + col
+                if y_cord < SCREEN_HEIGHT and x_cord < SCREEN_WIDTH:
+                    spritePixel = spriteByte & (0x80 >> col)
+                    # spritePixel = (spriteByte >> (7 - col)) & 0x01
+                    # if (self.screenBuf[y_cord*SCREEN_WIDTH+x_cord]&spritePixel) == 1:
+                    #     self.registers[0xF] = 1
+                    # self.screenBuf[y_cord * SCREEN_WIDTH + x_cord] ^= spritePixel
+                    screenPixel = self.screenBuf[y_cord*SCREEN_WIDTH + x_cord]
+                    if spritePixel:
+                        if screenPixel:self.registers[0xF] = 1
+                        self.screenBuf[(yPos + row)*SCREEN_WIDTH + (xPos+col)] ^= 1
     def OP_Ex9E(self):
         # SKP vx
         vx = (self.opcode & 0x0F00) >> 8
@@ -396,5 +403,5 @@ def loadROM(filename):
 
 if __name__ == '__main__':
     chip8 = Chip8()
-    chip8.load_rom("./roms/OPCODE")
+    chip8.load_rom("./roms/IBM")
     chip8.run()
