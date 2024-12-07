@@ -1,4 +1,4 @@
-import pygame,sys,time,random,os
+import pygame,sys,time,random,os,array
 SCREEN_WIDTH = 64
 SCREEN_HEIGHT = 32
 ZOOM = 10
@@ -30,8 +30,8 @@ _FONTSET = [0xF0, 0x90, 0x90, 0x90, 0xF0,  # 0
             0xF0, 0x80, 0xF0, 0x80, 0x80]  # F
 class Memory:
     def __init__(self) -> None:
-        self.ram = [0] * 1024 * 4
-        self.stack = [0] * 16
+        self.ram = memoryview(bytearray(1024 * 4))  # 4k
+        self.stack = array.array('H',range(16))      # 16 bit * 16
         for i in range(len(_FONTSET)):
             self.ram[FONTSET_START_ADDR+i] = _FONTSET[i]
     def write(self,data:list):
@@ -75,15 +75,15 @@ class Keyboard:
             elif event.type == pygame.KEYUP:
                 keys_buf[key] = 0
 class CPU:
-    def __init__(self) -> None:
-        self.registers = [0]*16
+    def __init__(self) -> None: # if reg[x] value > 256,reg[0xF] set 1,so can'y use bytearray
+        self.registers = array.array('h',range(16))       # 8 bit*16   
         self.memory = Memory()
-        self.regIndex = 0
-        self.regPC = START_ADDR
-        self.regSP = 0
-        self.delayTimer = 0
-        self.soundTimer = 0
-        self.keypadBuf = [0]*16
+        self.regIndex = 0       # 16 bit
+        self.regPC = START_ADDR # 16 bit
+        self.regSP = 0          # 16 bit
+        self.delayTimer = 0     # 8 bit
+        self.soundTimer = 0     # 8 bit
+        self.keypadBuf = bytearray(16) # [0]*16
         self.screenBuf = self.clearScreenBuf()
         pygame.mixer.music.load(os.path.join(os.path.dirname(__file__),"beep.mp3"))
         self.opcode = 0
@@ -393,15 +393,17 @@ class Chip8:
         sys.exit()
 
 def loadROM(filename):
-    data = []
-    with open(filename,'rb') as f:
-        file_bytes = f.read()
-        for byte in file_bytes:
-            data.append(byte)
+    data = bytearray()
+    with open(filename,'rb') as fin:
+        for byte in fin:    # file_bytes = f.read()
+            data += byte    # for byte in file_bytes:
+                            #     data.append(byte)
     return data
 
-
 if __name__ == '__main__':
-    chip8 = Chip8()
-    chip8.load_rom("./roms/IBM")
-    chip8.run()
+    try:
+        chip8 = Chip8()
+        chip8.load_rom("TETRIS")
+        chip8.run()
+    except Exception as e:
+        print(f"Err: {e}")
